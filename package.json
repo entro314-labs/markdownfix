@@ -5,11 +5,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/username/markdownfix.git"
+    "url": "git+https://github.com/entro314-labs/markdownfix.git"
   },
-  "homepage": "https://github.com/username/markdownfix#readme",
+  "homepage": "https://github.com/entro314-labs/markdownfix#readme",
   "bugs": {
-    "url": "https://github.com/username/markdownfix/issues"
+    "url": "https://github.com/entro314-labs/markdownfix/issues"
   },
   "files": [
     ".remarkrc.js",
@@ -21,7 +21,7 @@
   ],
   "bin": {
     "markdownfix": "./cli.js",
-    "mdfmt": "./cli.js",
+    "mdfix": "./cli.js",
     "markdownfix-setup": "./setup.js"
   },
   "scripts": {

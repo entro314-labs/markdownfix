@@ -131,12 +131,12 @@ markdownfix setup              # Create example content structure
 The CLI is available via two commands:
 
 - `markdownfix` (full name)
-- `mdfmt` (short alias)
+- `mdfix` (short alias)
 
 ```bash
 # These are equivalent
 markdownfix format
-mdfmt format
+mdfix format
 ```
 
 ### Options
@@ -152,19 +152,19 @@ mdfmt format
 
 ```bash
 # Format all markdown in project
-mdfmt format
+mdfix format
 
 # Check specific files
-mdfmt check README.md CHANGELOG.md
+mdfix check README.md CHANGELOG.md
 
 # Lint with glob pattern
-mdfmt lint --glob "docs/**/*.{md,mdx}"
+mdfix lint --glob "docs/**/*.{md,mdx}"
 
 # Quiet formatting
-mdfmt format --quiet
+mdfix format --quiet
 
 # Get help
-mdfmt --help
+mdfix --help
 ```
 
 ## Development Scripts
