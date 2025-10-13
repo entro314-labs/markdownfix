@@ -69,7 +69,7 @@ EXAMPLES:
   # Initialize configuration
   markdownfix init
 
-For more information, visit: https://github.com/username/markdownfix
+For more information, visit: https://github.com/entro314-labs/markdownfix
 `);
 }
 

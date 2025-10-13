@@ -1,6 +1,6 @@
 {
   "name": "markdownfix",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Opinionated markdown formatter and linter for MD, MDD and MDX files using Remark/Unified ecosystem",
   "type": "module",
   "repository": {
@@ -47,7 +47,7 @@
     "markdown-linter",
     "opinionated"
   ],
-  "author": "Dominik Ospritis",
+  "author": "Dominikos Pritis",
   "license": "MIT",
   "devDependencies": {
     "markdown-link-check": "^3.14.1",
@@ -59,6 +59,7 @@
   "dependencies": {
     "@adobe/remark-gridtables": "^3.0.15",
     "@code-dot-org/remark-plugins": "^2.0.0",
+    "@entro314labs/mdd": "^0.0.6",
     "@theguild/remark-mermaid": "^0.3.0",
     "fumadocs-docgen": "^3.0.2",
     "glob": "^11.0.3",

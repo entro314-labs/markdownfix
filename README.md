@@ -102,7 +102,7 @@ markdownfix setup
 
 ### MDD Support
 
-This formatter can **optionally** format `.mdd` files if you install the [MDD package](../mdd/):
+This formatter can **optionally** format `.mdd` files if you install the [MDD package](https://www.npmjs.com/package/@entro314labs/mdd):
 
 ```bash
 # Install MDD support
@@ -112,7 +112,7 @@ pnpm add mdd
 pnpm run format
 ```
 
-**Note**: MDD is a separate project for business documents. See the [MDD project](../mdd/) for details.
+**Note**: MDD is a separate project for business documents. See the [MDD project](https://github.com/entro314-labs/mdd) for details.
 
 ## CLI Commands
 
@@ -291,7 +291,7 @@ This repository focuses on **developer documentation** (READMEs, technical docs,
 
 For **business documents** (invoices, proposals, letters, contracts), we have a companion project:
 
-### 📄 [MDD (Markdown Document)](../mdd/)
+### 📄 [MDD (Markdown Document)](https://github.com/entro314-labs/mdd)
 
 MDD extends markdown with business-focused features:
 
