@@ -71,22 +71,27 @@ markdownfix setup
 ## What Gets Formatted
 
 ### Lists
+
 - **Unordered**: `-` (never `*` or `+`)
 - **Ordered**: `1.` incremental (never `1)`)
 
 ### Emphasis
+
 - **Italic**: `_text_` (underscore, not asterisk)
 - **Bold**: `**text**` (double asterisk, not underscore)
 
 ### Headings
+
 - **Style**: ATX (`# Title`), never setext (`===`)
 - **Hierarchy**: Must progress sequentially (no skipping levels)
 
 ### Code Blocks
+
 - Always fenced (` ``` `) with language identifiers
 - Never indented code blocks
 
 ### Formatting
+
 - **Line length**: 100 characters max with smart wrapping
 - **Tables**: Padded cells with aligned pipes (auto-formatted)
 - **Final newline**: All files must end with `\n`
@@ -94,11 +99,11 @@ markdownfix setup
 
 ## File Support
 
-| Extension | Support | Features | Use Case |
-|-----------|---------|----------|----------|
-| `.md` | ✅ Full | GFM, frontmatter, tables, task lists | Documentation, READMEs, blogs |
-| `.mdx` | ✅ Full | Above + JSX components, imports/exports | React docs, interactive content |
-| `.mdd` | ⚠️ Optional | Business documents (see below) | Invoices, proposals, contracts |
+| Extension | Support     | Features                                | Use Case                        |
+| --------- | ----------- | --------------------------------------- | ------------------------------- |
+| `.md`     | ✅ Full      | GFM, frontmatter, tables, task lists    | Documentation, READMEs, blogs   |
+| `.mdx`    | ✅ Full      | Above + JSX components, imports/exports | React docs, interactive content |
+| `.mdd`    | ⚠️ Optional | Business documents (see below)          | Invoices, proposals, contracts  |
 
 ### MDD Support
 
@@ -209,11 +214,13 @@ markdownfix/
 ### `.remarkrc.js`
 
 Central configuration defining:
+
 - All formatting rules
 - Plugin chain order
 - Lint rule settings
 
 **Plugin order is critical:**
+
 1. `remark-frontmatter` - Parse YAML/TOML
 2. `remark-gfm` - GitHub Flavored Markdown
 3. `remark-mdx` - MDX support (conditional)
@@ -223,6 +230,7 @@ Central configuration defining:
 ### `.remarkignore`
 
 Files excluded from processing:
+
 - `README.md`
 - `CHANGELOG.md`
 - `LICENSE`
@@ -246,6 +254,7 @@ author: Optional but recommended
 **Cause**: No markdown files found or all files excluded
 
 **Solution**:
+
 - Ensure markdown files exist in `content/` directory
 - Check `.remarkignore` patterns
 - Verify correct file extensions (`.md`, `.mdx`)
@@ -255,6 +264,7 @@ author: Optional but recommended
 **Cause**: Some rules require manual fixes (duplicate headings, broken links)
 
 **Solution**:
+
 - Read console output for specific violations
 - Manually fix reported issues
 - Use `pnpm run format:check` to separate formatting from lint errors
@@ -264,6 +274,7 @@ author: Optional but recommended
 **Cause**: Invalid JSX syntax
 
 **Solution**:
+
 - Verify JSX is valid JavaScript
 - Check all tags are properly closed
 - Ensure React components use `<Component />` not `<Component>`
@@ -285,41 +296,64 @@ pnpm run process:safe
 
 **Disable VS Code remark extensions** - they may conflict with this opinionated configuration. Always use command line processing.
 
-## Two Projects, One Ecosystem
+## Entro314 Labs Markdown Ecosystem
 
-This repository focuses on **developer documentation** (READMEs, technical docs, blogs).
+markdownfix is part of a comprehensive markdown ecosystem. For complete documentation, see [PROJECT\_ECOSYSTEM.md](../PROJECT_ECOSYSTEM.md).
 
-For **business documents** (invoices, proposals, letters, contracts), we have a companion project:
+### Companion Projects
 
-### 📄 [MDD (Markdown Document)](https://github.com/entro314-labs/mdd)
+#### 📄 [MDD (Markdown Document)](https://github.com/entro314-labs/mdd)
 
-MDD extends markdown with business-focused features:
+**The missing document layer for the AI-to-Office pipeline.**
 
-- Letterheads and headers/footers
-- Signature blocks
-- Contact information blocks
-- Professional PDF/DOCX output
-- Invoice and proposal templates
+Semantic document format for professional business documents:
+
+- **Semantic directives**: `::letterhead`, `::signature-block`, `::header`, `::footer`
+- **Multi-format output**: HTML, PDF, DOCX from single source
+- **AI workflow integration**: ChatGPT/Claude markdown → professional documents
+- **Zero configuration**: Professional styling built-in
+- **200+ document types**: Comprehensive business document catalog
+- **Version control friendly**: Plain text `.mdd` files
+
+**Installation**: `npm install -g @entro314labs/mdd`
+
+**Quick start**:
 
 ```bash
-# Quick example
-cd ../mdd
-pnpm run preview examples/invoice.mdd
-# Opens professional HTML invoice in browser
+# Preview business document
+mdd-preview document.mdd
+
+# Or use with npx
+npx mdd-preview examples/invoice.mdd
 ```
 
-**When to use which:**
+markdownfix can **optionally format `.mdd` files** by installing MDD as a dependency.
 
-| Use Case | Project | File Type |
-|----------|---------|-----------|
-| README files | Markdown Formatter | `.md` |
-| Technical docs | Markdown Formatter | `.md` |
-| Blog posts | Markdown Formatter | `.md` / `.mdx` |
-| React documentation | Markdown Formatter | `.mdx` |
-| **Business letters** | **MDD** | `.mdd` |
-| **Invoices** | **MDD** | `.mdd` |
-| **Proposals** | **MDD** | `.mdd` |
-| **Contracts** | **MDD** | `.mdd` |
+#### 🖥️ [Anasa](https://github.com/entro314-labs/anasa)
+
+Desktop knowledge management application with MDD integration:
+
+- Bidirectional linking and graph visualization
+- TipTap WYSIWYG editor
+- **First GUI editor for MDD format**
+- Create professional business documents inside your knowledge base
+- Live preview and PDF export
+
+**Status**: MDD integration planned ([see integration spec](../anasa/MDD_INTEGRATION_SPEC.md))
+
+### When to Use Which
+
+| Document Type                  | Use         | File Extension | Package                     |
+| ------------------------------ | ----------- | -------------- | --------------------------- |
+| README files                   | markdownfix | `.md`          | `@entro314labs/markdownfix` |
+| Technical documentation        | markdownfix | `.md`          | `@entro314labs/markdownfix` |
+| Blog posts                     | markdownfix | `.md` / `.mdx` | `@entro314labs/markdownfix` |
+| React component docs           | markdownfix | `.mdx`         | `@entro314labs/markdownfix` |
+| **Business letters**           | **MDD**     | **`.mdd`**     | **`@entro314labs/mdd`**     |
+| **Invoices**                   | **MDD**     | **`.mdd`**     | **`@entro314labs/mdd`**     |
+| **Proposals**                  | **MDD**     | **`.mdd`**     | **`@entro314labs/mdd`**     |
+| **Contracts**                  | **MDD**     | **`.mdd`**     | **`@entro314labs/mdd`**     |
+| Knowledge base + business docs | Anasa + MDD | `.md` + `.mdd` | Desktop app                 |
 
 ## Documentation
 
@@ -335,6 +369,7 @@ pnpm run preview examples/invoice.mdd
 ## Contributing
 
 This is an opinionated formatter with specific style decisions. Contributions should:
+
 - Maintain existing formatting rules
 - Add value for developer documentation
 - Not break existing lint rules

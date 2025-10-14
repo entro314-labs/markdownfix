@@ -76,6 +76,8 @@ export default {
     ['remark-lint-final-newline', true],
     ['remark-lint-hard-break-spaces', true],
     ['remark-lint-no-empty-sections', true],
+    // Allow .md, .mdx, and .mdd file extensions
+    ['remark-lint-file-extension', ['md', 'mdx', 'mdd']],
 
     // Must be last - handles the output formatting
     'remark-stringify'
