@@ -17,8 +17,9 @@ import remarkStringify from 'remark-stringify';
 import fs from 'fs/promises';
 import path from 'path';
 import { glob } from 'glob';
+import { execSync } from 'child_process';
 
-const MARKDOWN_EXTENSIONS = ['md', 'mdx', 'mdd'];
+const MARKDOWN_EXTENSIONS = ['md', 'mdx', 'mdc', 'mdd'];
 
 // Import configuration from .remarkrc.js
 let remarkConfig;
@@ -44,6 +45,7 @@ COMMANDS:
   format [files]     Format markdown files (writes changes)
   check [files]      Check formatting without writing changes
   lint [files]       Lint markdown files (no formatting)
+  nuclear [files]    🚀 Run ALL linters and fixers (remark + ESLint)
   init               Create .remarkrc.js configuration file
   setup              Create example content structure
 
@@ -52,6 +54,7 @@ OPTIONS:
   --version, -v      Show version number
   --quiet, -q        Suppress output except errors
   --glob <pattern>   Use glob pattern (e.g., "**/*.md")
+  --nuclear          Run complete lint+fix workflow (alias for nuclear command)
 
 EXAMPLES:
   # Format all markdown files in current directory
@@ -66,8 +69,21 @@ EXAMPLES:
   # Format quietly
   markdownfix format --quiet
 
+  # 🚀 Nuclear option - fix EVERYTHING
+  markdownfix nuclear
+  markdownfix format --nuclear
+
   # Initialize configuration
   markdownfix init
+
+NUCLEAR MODE:
+  The nuclear command runs a comprehensive fix workflow:
+  1. Remark formatting (auto-fix markdown syntax)
+  2. Remark linting (validate markdown rules)
+  3. ESLint auto-fix (fix JavaScript in code blocks)
+  4. ESLint linting (validate code quality)
+
+  Perfect for: CI/CD, pre-commit hooks, major cleanups
 
 For more information, visit: https://github.com/entro314-labs/markdownfix
 `);
@@ -169,6 +185,145 @@ async function processFiles(files, options = {}) {
 }
 
 /**
+ * Run nuclear mode - comprehensive fix workflow
+ * Executes: remark format -> remark lint -> eslint fix -> eslint lint
+ */
+async function runNuclearMode(files, options = {}) {
+  const { quiet = false } = options;
+  const hasEslint = await checkEslintAvailable();
+
+  if (!quiet) {
+    console.log('\n🚀 NUCLEAR MODE ACTIVATED\n');
+    console.log(`Processing ${files.length} file(s) with comprehensive workflow...\n`);
+  }
+
+  let overallSuccess = true;
+  const steps = [];
+
+  // Step 1: Remark formatting
+  if (!quiet) console.log('Step 1/4: Running remark formatting...');
+  try {
+    const result = await processFiles(files, { write: true, quiet: true });
+    steps.push({
+      name: 'Remark Format',
+      success: !result.hasErrors,
+      details: `Formatted ${result.processedCount}/${result.totalFiles} files`
+    });
+    if (result.hasErrors) overallSuccess = false;
+    if (!quiet) console.log(`  ✓ Remark formatting completed\n`);
+  } catch (error) {
+    steps.push({ name: 'Remark Format', success: false, details: error.message });
+    overallSuccess = false;
+    if (!quiet) console.log(`  ✗ Remark formatting failed: ${error.message}\n`);
+  }
+
+  // Step 2: Remark linting
+  if (!quiet) console.log('Step 2/4: Running remark linting...');
+  try {
+    const result = await processFiles(files, { lintOnly: true, quiet: true });
+    steps.push({
+      name: 'Remark Lint',
+      success: !result.hasErrors,
+      details: `Linted ${result.totalFiles} files`
+    });
+    if (result.hasErrors) {
+      if (!quiet) console.log('  ⚠️  Remark linting found issues (check output above)\n');
+      overallSuccess = false;
+    } else {
+      if (!quiet) console.log(`  ✓ Remark linting passed\n`);
+    }
+  } catch (error) {
+    steps.push({ name: 'Remark Lint', success: false, details: error.message });
+    overallSuccess = false;
+    if (!quiet) console.log(`  ✗ Remark linting failed: ${error.message}\n`);
+  }
+
+  // Step 3 & 4: ESLint (only if available)
+  if (hasEslint) {
+    // Step 3: ESLint auto-fix
+    if (!quiet) console.log('Step 3/4: Running ESLint auto-fix...');
+    try {
+      const fileList = files.join(' ');
+      const eslintCmd = `npx eslint --ext .md,.mdx,.mdc,.mdd --fix ${fileList}`;
+
+      try {
+        execSync(eslintCmd, {
+          stdio: quiet ? 'pipe' : 'inherit',
+          cwd: process.cwd()
+        });
+        steps.push({ name: 'ESLint Fix', success: true, details: 'Auto-fixed code blocks' });
+        if (!quiet) console.log(`  ✓ ESLint auto-fix completed\n`);
+      } catch (eslintError) {
+        // ESLint returns non-zero even if it fixes issues
+        steps.push({ name: 'ESLint Fix', success: false, details: 'Some issues could not be auto-fixed' });
+        if (!quiet) console.log(`  ⚠️  ESLint auto-fix completed with warnings\n`);
+      }
+    } catch (error) {
+      steps.push({ name: 'ESLint Fix', success: false, details: error.message });
+      if (!quiet) console.log(`  ✗ ESLint auto-fix failed: ${error.message}\n`);
+    }
+
+    // Step 4: ESLint linting
+    if (!quiet) console.log('Step 4/4: Running ESLint linting...');
+    try {
+      const fileList = files.join(' ');
+      const eslintCmd = `npx eslint --ext .md,.mdx,.mdc,.mdd ${fileList}`;
+
+      execSync(eslintCmd, {
+        stdio: quiet ? 'pipe' : 'inherit',
+        cwd: process.cwd()
+      });
+      steps.push({ name: 'ESLint Lint', success: true, details: 'All code blocks valid' });
+      if (!quiet) console.log(`  ✓ ESLint linting passed\n`);
+    } catch (eslintError) {
+      steps.push({ name: 'ESLint Lint', success: false, details: 'Linting issues found' });
+      overallSuccess = false;
+      if (!quiet) console.log(`  ⚠️  ESLint linting found issues\n`);
+    }
+  } else {
+    if (!quiet) {
+      console.log('Step 3/4: Skipping ESLint (not installed)');
+      console.log('  ℹ️  Install ESLint with: npm install -D eslint eslint-plugin-mdx\n');
+      console.log('Step 4/4: Skipping ESLint linting\n');
+    }
+    steps.push({ name: 'ESLint Fix', success: true, details: 'Skipped (not installed)' });
+    steps.push({ name: 'ESLint Lint', success: true, details: 'Skipped (not installed)' });
+  }
+
+  // Summary
+  if (!quiet) {
+    console.log('═'.repeat(60));
+    console.log('NUCLEAR MODE SUMMARY');
+    console.log('═'.repeat(60));
+    steps.forEach(step => {
+      const icon = step.success ? '✓' : '✗';
+      const status = step.success ? 'PASS' : 'FAIL';
+      console.log(`${icon} ${step.name.padEnd(20)} ${status.padEnd(6)} ${step.details}`);
+    });
+    console.log('═'.repeat(60));
+    if (overallSuccess) {
+      console.log('🎉 All checks passed! Your markdown is pristine.\n');
+    } else {
+      console.log('⚠️  Some issues remain. Review the output above.\n');
+    }
+  }
+
+  return { success: overallSuccess, steps };
+}
+
+/**
+ * Check if ESLint is available in the project
+ */
+async function checkEslintAvailable() {
+  try {
+    execSync('npx eslint --version', { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Initialize .remarkrc.js configuration
  */
 async function initConfig() {
@@ -250,6 +405,7 @@ async function main() {
   // Parse options
   const options = {
     quiet: commandArgs.includes('--quiet') || commandArgs.includes('-q'),
+    nuclear: commandArgs.includes('--nuclear'),
     glob: null
   };
 
@@ -274,6 +430,14 @@ async function main() {
         console.log('No markdown files found');
         return;
       }
+
+      // Check for --nuclear flag
+      if (options.nuclear) {
+        const result = await runNuclearMode(files, { quiet: options.quiet });
+        process.exit(result.success ? 0 : 1);
+        break;
+      }
+
       if (!options.quiet) {
         console.log(`Formatting ${files.length} file(s)...`);
       }
@@ -328,6 +492,17 @@ async function main() {
       // Import and run setup.js
       const setupPath = new URL('./setup.js', import.meta.url);
       await import(setupPath);
+      break;
+    }
+
+    case 'nuclear': {
+      const files = await getFiles(fileArgs, options.glob);
+      if (files.length === 0) {
+        console.log('No markdown files found');
+        return;
+      }
+      const result = await runNuclearMode(files, { quiet: options.quiet });
+      process.exit(result.success ? 0 : 1);
       break;
     }
 

@@ -1,6 +1,6 @@
 # Markdown Formatter (markdownfix)
 
-**Opinionated markdown formatter and linter for `.md`, `.mdd`, and `.mdx` files**
+**Opinionated markdown formatter and linter for `.md`, `.mdx`, `.mdc`, and `.mdd` files**
 
 Built on the Remark ecosystem with strict, consistent formatting rules for developer documentation, technical writing, and web content. Perfect for README files, technical docs, blogs, and GitHub wikis.
 
@@ -8,10 +8,13 @@ Built on the Remark ecosystem with strict, consistent formatting rules for devel
 
 - ✅ **Opinionated formatting** - Consistent style across all markdown files
 - ✅ **GitHub Flavored Markdown** - Tables, task lists, strikethrough, autolinks
-- ✅ **MDX support** - JSX components in markdown
-- ✅ **Comprehensive linting** - 40+ lint rules for quality and consistency
+- ✅ **MDX support** - JSX components in markdown with ESLint integration
+- ✅ **MDC syntax support** - Markdown Components for Nuxt Content
+- ✅ **Comprehensive linting** - 40+ remark-lint rules for quality and consistency
+- ✅ **Code block linting** - ESLint integration for JavaScript/JSX in code blocks
 - ✅ **Link validation** - Check for broken links
 - ✅ **Auto-fixing** - Automatically fix formatting issues
+- ✅ **IDE integration** - Works with VS Code ESLint extension
 
 ## Installation
 
@@ -35,6 +38,9 @@ markdownfix check
 # Lint files for issues
 markdownfix lint
 
+# 🚀 Nuclear mode - run ALL linters and fixers
+markdownfix nuclear
+
 # Format specific files
 markdownfix format README.md docs/*.md
 
@@ -53,7 +59,8 @@ Add to your `package.json`:
 {
   "scripts": {
     "format:md": "markdownfix format",
-    "lint:md": "markdownfix lint"
+    "lint:md": "markdownfix lint",
+    "fix:md": "markdownfix nuclear"
   }
 }
 ```
@@ -103,7 +110,42 @@ markdownfix setup
 | --------- | ----------- | --------------------------------------- | ------------------------------- |
 | `.md`     | ✅ Full      | GFM, frontmatter, tables, task lists    | Documentation, READMEs, blogs   |
 | `.mdx`    | ✅ Full      | Above + JSX components, imports/exports | React docs, interactive content |
+| `.mdc`    | ✅ Full      | Markdown Components (Nuxt Content)      | Nuxt Content, Vue documentation |
 | `.mdd`    | ⚠️ Optional | Business documents (see below)          | Invoices, proposals, contracts  |
+
+### MDC Support
+
+This formatter includes **full support for `.mdc` files** and MDC (Markdown Components) syntax via `remark-mdc`. MDC is a superset of Markdown developed by Nuxt that allows you to use Vue-like components.
+
+**MDC Features:**
+
+```markdown
+<!-- Block components -->
+::card
+This is card content with **formatting**.
+::
+
+<!-- Inline components -->
+This is text with an :icon{name="rocket"} inline component.
+
+<!-- Props and attributes -->
+![Image]{.rounded width="400"}
+
+<!-- Slots and nesting -->
+::alert{type="warning"}
+This is a warning message!
+::
+```
+
+**Perfect for:**
+- Nuxt Content projects
+- Component-driven documentation
+- Interactive markdown content
+- Vue.js documentation sites
+
+**File Usage:**
+- `.mdc` extension - Dedicated MDC files (like `.mdx` for JSX)
+- MDC syntax also works in `.md` and `.mdx` files
 
 ### MDD Support
 
@@ -127,8 +169,72 @@ pnpm run format
 markdownfix format [files...]   # Format and fix markdown files
 markdownfix check [files...]    # Check without writing changes
 markdownfix lint [files...]     # Lint for issues only
+markdownfix nuclear [files...]  # 🚀 Run ALL linters and fixers
 markdownfix init               # Create .remarkrc.js config
 markdownfix setup              # Create example content structure
+```
+
+### 🚀 Nuclear Mode
+
+The `nuclear` command runs a comprehensive 4-step workflow that applies **all** available linters and fixers:
+
+1. **Remark Formatting** - Auto-fix markdown syntax
+2. **Remark Linting** - Validate markdown rules (40+ rules)
+3. **ESLint Auto-fix** - Fix JavaScript/JSX in code blocks
+4. **ESLint Linting** - Validate code quality
+
+**Perfect for:**
+
+- Pre-commit hooks
+- CI/CD pipelines
+- Major cleanup sessions
+- Ensuring everything is pristine
+
+**Usage:**
+
+```bash
+# Run on all markdown files
+markdownfix nuclear
+
+# Run on specific directory
+markdownfix nuclear --glob "docs/**/*.{md,mdx}"
+
+# Add to package.json
+{
+  "scripts": {
+    "precommit": "markdownfix nuclear"
+  }
+}
+```
+
+**Example Output:**
+
+```
+🚀 NUCLEAR MODE ACTIVATED
+
+Processing 15 file(s) with comprehensive workflow...
+
+Step 1/4: Running remark formatting...
+  ✓ Remark formatting completed
+
+Step 2/4: Running remark linting...
+  ✓ Remark linting passed
+
+Step 3/4: Running ESLint auto-fix...
+  ✓ ESLint auto-fix completed
+
+Step 4/4: Running ESLint linting...
+  ✓ ESLint linting passed
+
+════════════════════════════════════════════════════════════
+NUCLEAR MODE SUMMARY
+════════════════════════════════════════════════════════════
+✓ Remark Format        PASS   Formatted 15/15 files
+✓ Remark Lint          PASS   Linted 15 files
+✓ ESLint Fix           PASS   Auto-fixed code blocks
+✓ ESLint Lint          PASS   All code blocks valid
+════════════════════════════════════════════════════════════
+🎉 All checks passed! Your markdown is pristine.
 ```
 
 ### Command Aliases
@@ -182,11 +288,15 @@ pnpm run format         # Apply fixes using remark-cli
 pnpm run format:check   # Preview changes
 
 # Linting
-pnpm run lint           # Check compliance
+pnpm run lint           # Remark-lint only
+pnpm run lint:eslint    # ESLint + MDX only
+pnpm run lint:eslint:fix # ESLint auto-fix
+pnpm run lint:all       # Both remark and ESLint
 
 # Combined
-pnpm run process        # Format then lint
-pnpm run process:safe   # Dry-run first, then process
+pnpm run process        # Format then lint all
+pnpm run process:safe   # Dry-run first, then lint all
+pnpm run nuclear        # 🚀 Run ALL linters and fixers
 pnpm test               # Same as process:safe
 
 # Utilities
@@ -358,6 +468,7 @@ Desktop knowledge management application with MDD integration:
 ## Documentation
 
 - **[content/guides/style-guide.md](content/guides/style-guide.md)** - Style specifications
+- **[ESLINT_INTEGRATION.md](ESLINT_INTEGRATION.md)** - ESLint + MDX integration guide
 
 ## Tech Stack
 
@@ -365,6 +476,8 @@ Desktop knowledge management application with MDD integration:
 - **Unified** - AST transformation
 - **GFM** - GitHub Flavored Markdown
 - **MDX** - JSX in markdown
+- **MDC** - Markdown Components (Nuxt Content)
+- **ESLint** - JavaScript/JSX linting in code blocks
 
 ## Contributing
 

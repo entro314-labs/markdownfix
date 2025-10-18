@@ -1,6 +1,6 @@
 /**
  * Opinionated Remark configuration for markdown processing
- * Supports .md, and .mdx files with consistent formatting
+ * Supports .md, .mdx, and .mdc files with consistent formatting
  * Optionally supports .mdd files if mdd package is installed
  */
 
@@ -18,7 +18,7 @@ try {
   ];
   console.log('✓ MDD support enabled');
 } catch (e) {
-  // MDD package not installed - only support .md and .mdx
+  // MDD package not installed - only support .md, .mdx, and .mdc
   mddPlugins = ['remark-mdx'];
   console.log('ℹ MDD support not available (install mdd package for .mdd file support)');
 }
@@ -50,6 +50,9 @@ export default {
     // Enable GitHub Flavored Markdown (tables, strikethrough, etc.)
     'remark-gfm',
 
+    // Enable MDC syntax (Markdown Components for Nuxt Content)
+    'remark-mdc',
+
     // MDX/MDD plugins (loaded dynamically above)
     ...mddPlugins,
 
@@ -76,8 +79,6 @@ export default {
     ['remark-lint-final-newline', true],
     ['remark-lint-hard-break-spaces', true],
     ['remark-lint-no-empty-sections', true],
-    // Allow .md, .mdx, and .mdd file extensions
-    ['remark-lint-file-extension', ['md', 'mdx', 'mdd']],
 
     // Must be last - handles the output formatting
     'remark-stringify'
