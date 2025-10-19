@@ -207,10 +207,17 @@ async function runNuclearMode(files, options = {}) {
     steps.push({
       name: 'Remark Format',
       success: !result.hasErrors,
-      details: `Formatted ${result.processedCount}/${result.totalFiles} files`
+      details: `Wrote ${result.processedCount}/${result.totalFiles} files`
     });
     if (result.hasErrors) overallSuccess = false;
-    if (!quiet) console.log(`  ✓ Remark formatting completed\n`);
+    if (!quiet) {
+      console.log(`  ✓ Remark formatting completed (${result.processedCount} files written)`);
+      if (result.hasErrors) {
+        console.log(`  ⚠️  Some files had lint warnings (but were still formatted)\n`);
+      } else {
+        console.log();
+      }
+    }
   } catch (error) {
     steps.push({ name: 'Remark Format', success: false, details: error.message });
     overallSuccess = false;
