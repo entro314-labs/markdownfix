@@ -139,10 +139,12 @@ async function processFiles(files, options = {}) {
 
       // Add stringify for formatting (unless lint-only)
       if (!lintOnly) {
+        // For MDX files, disable fences to prevent JSX from being wrapped in code blocks
+        const isMdx = filePath.endsWith('.mdx') || filePath.endsWith('.mdd');
         processor = processor.use(remarkStringify, {
           bullet: '-',
           emphasis: '_',
-          fences: true,
+          fences: !isMdx, // Disable fences for MDX to preserve JSX
           listItemIndent: 'one',
           rule: '-',
           strong: '*',

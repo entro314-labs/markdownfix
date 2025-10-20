@@ -32,7 +32,7 @@ export default {
     emphasis: '_', // Use _emphasis_ over *emphasis*
     strong: '*', // Use **strong** over __strong__
     fence: '`', // Use ``` for code fences
-    fences: true, // Always use fences for code blocks
+    fences: true, // Use fences for code blocks (disabled for MDX in cli.js)
     incrementListMarker: true, // Increment ordered list markers
     listItemIndent: 'one', // Use one space for list indentation
     quote: '"', // Use double quotes in titles
@@ -41,6 +41,7 @@ export default {
     ruleSpaces: false, // No spaces in horizontal rules
     setext: false, // Use # instead of === underlines
     tightDefinitions: true, // No blank lines between definitions
+    resourceLink: false, // Don't escape link URLs unnecessarily
   },
 
   plugins: [
