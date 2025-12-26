@@ -315,9 +315,20 @@ class AutoFormatter {
           continue;
         }
 
-        const match = line.match(rule.pattern);
+        // Remove global flag for match() to preserve capture groups
+        const patternWithoutGlobal = new RegExp(rule.pattern.source, rule.pattern.flags.replace('g', ''));
+        const match = line.match(patternWithoutGlobal);
         if (match) {
-          line = rule.transform(match);
+          // For global patterns, use replace to handle all occurrences
+          if (rule.pattern.global) {
+            line = line.replace(rule.pattern, (...args) => {
+              // Create match-like array: [fullMatch, ...groups]
+              const groups = args.slice(0, -2); // Remove offset and input
+              return rule.transform(groups);
+            });
+          } else {
+            line = rule.transform(match);
+          }
           matched = true;
           break;
         }
