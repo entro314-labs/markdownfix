@@ -22,14 +22,27 @@ import { execSync } from 'child_process';
 const MARKDOWN_EXTENSIONS = ['md', 'mdx', 'mdc', 'mdd'];
 
 // Import configuration from .remarkrc.js
+// Suppress console output during import to avoid MDD warnings in nuclear mode
+const originalLog = console.log;
+const originalInfo = console.info;
+console.log = () => {};
+console.info = () => {};
+
 let remarkConfig;
 try {
   const configModule = await import(path.join(process.cwd(), '.remarkrc.js'));
   remarkConfig = configModule.default;
 } catch (e) {
+  // Restore console before warning
+  console.log = originalLog;
+  console.info = originalInfo;
   console.warn('⚠️  No .remarkrc.js found in current directory, using default config');
   remarkConfig = null;
 }
+
+// Restore console
+console.log = originalLog;
+console.info = originalInfo;
 
 /**
  * Show help text
@@ -79,9 +92,8 @@ EXAMPLES:
 NUCLEAR MODE:
   The nuclear command runs a comprehensive fix workflow:
   1. Remark formatting (auto-fix markdown syntax)
-  2. Remark linting (validate markdown rules)
-  3. ESLint auto-fix (fix JavaScript in code blocks)
-  4. ESLint linting (validate code quality)
+  2. ESLint auto-fix (fix JavaScript/JSX in code blocks)
+  3. Final validation (report remaining issues)
 
   Perfect for: CI/CD, pre-commit hooks, major cleanups
 
@@ -188,34 +200,53 @@ async function processFiles(files, options = {}) {
 
 /**
  * Run nuclear mode - comprehensive fix workflow
- * Executes: remark format -> remark lint -> eslint fix -> eslint lint
+ * Executes: remark format -> eslint fix -> final validation
  */
 async function runNuclearMode(files, options = {}) {
   const { quiet = false } = options;
   const hasEslint = await checkEslintAvailable();
 
+  // Filter out ESLint-ignored files in nuclear mode
+  let filteredFiles = files;
+  let ignoredCount = 0;
+  if (hasEslint) {
+    const ignorePatterns = await getEslintIgnorePatterns();
+    const originalCount = files.length;
+    filteredFiles = files.filter(file => !isFileIgnored(file, ignorePatterns));
+    ignoredCount = originalCount - filteredFiles.length;
+  }
+
   if (!quiet) {
     console.log('\n🚀 NUCLEAR MODE ACTIVATED\n');
-    console.log(`Processing ${files.length} file(s) with comprehensive workflow...\n`);
+    if (ignoredCount > 0) {
+      console.log(`Found ${files.length} file(s), processing ${filteredFiles.length} (${ignoredCount} ignored by ESLint config)\n`);
+    } else {
+      console.log(`Processing ${filteredFiles.length} file(s) with comprehensive workflow...\n`);
+    }
   }
 
   let overallSuccess = true;
   const steps = [];
+  let remarkIssues = [];
+  let eslintIssues = [];
 
-  // Step 1: Remark formatting
-  if (!quiet) console.log('Step 1/4: Running remark formatting...');
+  // Step 1: Remark formatting (auto-fixes what it can)
+  if (!quiet) console.log('Step 1/3: Running remark formatting...');
   try {
-    const result = await processFiles(files, { write: true, quiet: true });
+    const result = await processFiles(filteredFiles, { write: true, quiet: true });
+    const formatted = result.processedCount;
+    const withIssues = result.hasErrors;
+    
     steps.push({
       name: 'Remark Format',
-      success: !result.hasErrors,
-      details: `Wrote ${result.processedCount}/${result.totalFiles} files`
+      success: formatted > 0,
+      details: `Formatted ${formatted}/${result.totalFiles} files`
     });
-    if (result.hasErrors) overallSuccess = false;
+    
     if (!quiet) {
-      console.log(`  ✓ Remark formatting completed (${result.processedCount} files written)`);
-      if (result.hasErrors) {
-        console.log(`  ⚠️  Some files had lint warnings (but were still formatted)\n`);
+      console.log(`  ✓ Formatted ${formatted} file(s)`);
+      if (withIssues) {
+        console.log(`  ℹ️  Some issues require manual fixes\n`);
       } else {
         console.log();
       }
@@ -226,87 +257,94 @@ async function runNuclearMode(files, options = {}) {
     if (!quiet) console.log(`  ✗ Remark formatting failed: ${error.message}\n`);
   }
 
-  // Step 2: Remark linting
-  if (!quiet) console.log('Step 2/4: Running remark linting...');
-  try {
-    const result = await processFiles(files, { lintOnly: true, quiet: true });
-    steps.push({
-      name: 'Remark Lint',
-      success: !result.hasErrors,
-      details: `Linted ${result.totalFiles} files`
-    });
-    if (result.hasErrors) {
-      if (!quiet) console.log('  ⚠️  Remark linting found issues (check output above)\n');
-      overallSuccess = false;
-    } else {
-      if (!quiet) console.log(`  ✓ Remark linting passed\n`);
-    }
-  } catch (error) {
-    steps.push({ name: 'Remark Lint', success: false, details: error.message });
-    overallSuccess = false;
-    if (!quiet) console.log(`  ✗ Remark linting failed: ${error.message}\n`);
-  }
 
-  // Step 3 & 4: ESLint (only if ESLint is available)
+  // Step 2: ESLint auto-fix (only if ESLint is available)
   if (hasEslint) {
     const eslintConfigInfo = await getEslintConfigPath();
     const { configPath, source } = eslintConfigInfo;
 
-    if (!quiet && source === 'bundled') {
-      console.log('  ℹ️  Using bundled ESLint config (no local config found)\n');
-    }
-
-    // Step 3: ESLint auto-fix
-    if (!quiet) console.log('Step 3/4: Running ESLint auto-fix...');
+    if (!quiet) console.log('Step 2/3: Running ESLint auto-fix on code blocks...');
     try {
-      // Quote each file path to handle spaces and special characters
-      const fileList = files.map(f => `"${f}"`).join(' ');
+      const fileList = filteredFiles.map(f => `"${f}"`).join(' ');
       const eslintCmd = `npx eslint --config "${configPath}" --fix ${fileList}`;
 
       try {
-        execSync(eslintCmd, {
-          stdio: quiet ? 'pipe' : 'inherit',
+        const result = execSync(eslintCmd, {
+          stdio: 'pipe',
           cwd: process.cwd()
         });
-        steps.push({ name: 'ESLint Fix', success: true, details: 'Auto-fixed code blocks' });
+        steps.push({ name: 'ESLint Fix', success: true, details: 'Fixed code blocks' });
         if (!quiet) console.log(`  ✓ ESLint auto-fix completed\n`);
       } catch (eslintError) {
-        // ESLint returns non-zero even if it fixes issues
-        steps.push({ name: 'ESLint Fix', success: false, details: 'Some issues could not be auto-fixed' });
-        if (!quiet) console.log(`  ⚠️  ESLint auto-fix completed with warnings\n`);
+        // ESLint returns non-zero if there are unfixable issues
+        const output = eslintError.stdout?.toString() || eslintError.stderr?.toString() || '';
+        
+        // Filter out "File ignored" warnings - these are expected
+        const lines = output.split('\n').filter(line => 
+          !line.includes('File ignored because of a matching ignore pattern')
+        );
+        const filteredOutput = lines.join('\n');
+        
+        const hasWarnings = filteredOutput.includes('warning');
+        const hasErrors = filteredOutput.includes('error');
+        
+        if (hasErrors || hasWarnings) {
+          steps.push({ name: 'ESLint Fix', success: false, details: 'Some issues remain' });
+          if (!quiet) console.log(`  ⚠️  ESLint found issues that need manual fixes\n`);
+        } else {
+          steps.push({ name: 'ESLint Fix', success: true, details: 'Fixed code blocks' });
+          if (!quiet) console.log(`  ✓ ESLint auto-fix completed\n`);
+        }
       }
     } catch (error) {
       steps.push({ name: 'ESLint Fix', success: false, details: error.message });
       if (!quiet) console.log(`  ✗ ESLint auto-fix failed: ${error.message}\n`);
     }
-
-    // Step 4: ESLint linting
-    if (!quiet) console.log('Step 4/4: Running ESLint linting...');
-    try {
-      // Quote each file path to handle spaces and special characters
-      const fileList = files.map(f => `"${f}"`).join(' ');
-      const eslintCmd = `npx eslint --config "${configPath}" ${fileList}`;
-
-      execSync(eslintCmd, {
-        stdio: quiet ? 'pipe' : 'inherit',
-        cwd: process.cwd()
-      });
-      steps.push({ name: 'ESLint Lint', success: true, details: 'All code blocks valid' });
-      if (!quiet) console.log(`  ✓ ESLint linting passed\n`);
-    } catch (eslintError) {
-      steps.push({ name: 'ESLint Lint', success: false, details: 'Linting issues found' });
-      overallSuccess = false;
-      if (!quiet) console.log(`  ⚠️  ESLint linting found issues\n`);
-    }
   } else {
-    // ESLint not installed
     if (!quiet) {
-      console.log('Step 3/4: Skipping ESLint (not installed)');
-      console.log('  ℹ️  Install ESLint with: npm install -D eslint eslint-plugin-mdx\n');
-      console.log('Step 4/4: Skipping ESLint linting\n');
+      console.log('Step 2/3: Skipping ESLint (not installed)');
+      console.log('  ℹ️  Install with: npm install -D eslint eslint-plugin-mdx\n');
     }
     steps.push({ name: 'ESLint Fix', success: true, details: 'Skipped (not installed)' });
-    steps.push({ name: 'ESLint Lint', success: true, details: 'Skipped (not installed)' });
+  }
+
+  // Step 3: Final validation
+  if (!quiet) console.log('Step 3/3: Running final validation...');
+  let validationResult;
+  try {
+    validationResult = await processFiles(filteredFiles, { lintOnly: true, quiet: true });
+    const hasIssues = validationResult.hasErrors;
+    
+    if (hasIssues) {
+      overallSuccess = false;
+    }
+    
+    steps.push({
+      name: 'Validation',
+      success: !hasIssues,
+      details: hasIssues ? 'Issues found' : 'All checks passed'
+    });
+    
+    if (!quiet) {
+      if (hasIssues) {
+        console.log(`  ⚠️  Validation found remaining issues\n`);
+      } else {
+        console.log(`  ✓ All validation checks passed\n`);
+      }
+    }
+  } catch (error) {
+    steps.push({ name: 'Validation', success: false, details: error.message });
+    overallSuccess = false;
+    if (!quiet) console.log(`  ✗ Validation failed: ${error.message}\n`);
+  }
+
+  // Show detailed issues if validation failed
+  if (!quiet && validationResult?.hasErrors) {
+    console.log('═'.repeat(60));
+    console.log('REMAINING ISSUES');
+    console.log('═'.repeat(60));
+    await processFiles(filteredFiles, { lintOnly: true, quiet: false });
+    console.log();
   }
 
   // Summary
@@ -315,15 +353,22 @@ async function runNuclearMode(files, options = {}) {
     console.log('NUCLEAR MODE SUMMARY');
     console.log('═'.repeat(60));
     steps.forEach(step => {
-      const icon = step.success ? '✓' : '✗';
-      const status = step.success ? 'PASS' : 'FAIL';
-      console.log(`${icon} ${step.name.padEnd(20)} ${status.padEnd(6)} ${step.details}`);
+      const icon = step.success ? '✓' : '⚠️';
+      const status = step.success ? 'PASS' : 'NEEDS ATTENTION';
+      console.log(`${icon} ${step.name.padEnd(20)} ${status.padEnd(16)} ${step.details}`);
     });
     console.log('═'.repeat(60));
+    
     if (overallSuccess) {
       console.log('🎉 All checks passed! Your markdown is pristine.\n');
     } else {
-      console.log('⚠️  Some issues remain. Review the output above.\n');
+      console.log('\n📋 NEXT STEPS:');
+      console.log('   Review the issues above and fix them manually.');
+      console.log('   Common fixes:');
+      console.log('   • Shorten long lines (max 80 chars)');
+      console.log('   • Add language flags to code blocks (```js, ```bash, etc.)');
+      console.log('   • Fix filename issues (use lowercase, avoid special chars)');
+      console.log('   • Add blank lines between list items\n');
     }
   }
 
@@ -359,6 +404,60 @@ async function getEslintConfigPath() {
     const bundledConfig = new URL('./eslint.config.js', import.meta.url).pathname;
     return { configPath: bundledConfig, source: 'bundled' };
   }
+}
+
+/**
+ * Get ESLint ignore patterns from config
+ * Returns array of ignore patterns to filter files in nuclear mode
+ * Note: We parse the config file as text instead of importing it because
+ * the config has dependencies that require ESLint to be in the require cache
+ */
+async function getEslintIgnorePatterns() {
+  try {
+    const { configPath } = await getEslintConfigPath();
+    const configContent = await fs.readFile(configPath, 'utf-8');
+    
+    // Extract the ignores array using regex
+    // Look for: ignores: [ ... ]
+    const ignoresMatch = configContent.match(/ignores:\s*\[([\s\S]*?)\]/);
+    if (!ignoresMatch) return [];
+    
+    const ignoresContent = ignoresMatch[1];
+    
+    // Extract quoted strings from the array
+    const patterns = [];
+    const stringMatches = ignoresContent.matchAll(/['"]([^'"]+)['"]/g);
+    for (const match of stringMatches) {
+      patterns.push(match[1]);
+    }
+    
+    return patterns;
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * Check if a file matches any of the ignore patterns
+ */
+function isFileIgnored(filePath, ignorePatterns) {
+  // Convert ignore patterns to regex-like matching
+  for (const pattern of ignorePatterns) {
+    // Handle glob patterns
+    if (pattern.includes('**')) {
+      // **/*.config.js -> matches any .config.js file
+      const regex = new RegExp(pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\./g, '\\.'));
+      if (regex.test(filePath)) return true;
+    } else if (pattern.includes('*')) {
+      // *.js -> matches .js files in root
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '[^/]*').replace(/\./g, '\\.') + '$');
+      if (regex.test(filePath)) return true;
+    } else {
+      // Exact match or ends with pattern
+      if (filePath === pattern || filePath.endsWith('/' + pattern)) return true;
+    }
+  }
+  return false;
 }/**
  * Initialize .remarkrc.js configuration
  */

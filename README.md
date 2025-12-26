@@ -179,12 +179,11 @@ markdownfix setup              # Create example content structure
 
 ### 🚀 Nuclear Mode
 
-The `nuclear` command runs a comprehensive 4-step workflow that applies **all** available linters and fixers:
+The `nuclear` command runs a comprehensive 3-step workflow that applies **all** available linters and fixers:
 
 1. **Remark Formatting** - Auto-fix markdown syntax
-2. **Remark Linting** - Validate markdown rules (40+ rules)
-3. **ESLint Auto-fix** - Fix JavaScript/JSX in code blocks
-4. **ESLint Linting** - Validate code quality
+2. **ESLint Auto-fix** - Fix JavaScript/JSX in code blocks
+3. **Final Validation** - Report any remaining issues
 
 **Perfect for:**
 
@@ -210,35 +209,72 @@ markdownfix nuclear --glob "docs/**/*.{md,mdx}"
 }
 ```
 
-**Example Output:**
+**Example Output (Success):**
 
 ```
 🚀 NUCLEAR MODE ACTIVATED
 
 Processing 15 file(s) with comprehensive workflow...
 
-Step 1/4: Running remark formatting...
-  ✓ Remark formatting completed
+Step 1/3: Running remark formatting...
+  ✓ Formatted 15 file(s)
 
-Step 2/4: Running remark linting...
-  ✓ Remark linting passed
-
-Step 3/4: Running ESLint auto-fix...
+Step 2/3: Running ESLint auto-fix on code blocks...
   ✓ ESLint auto-fix completed
 
-Step 4/4: Running ESLint linting...
-  ✓ ESLint linting passed
+Step 3/3: Running final validation...
+  ✓ All validation checks passed
 
 ════════════════════════════════════════════════════════════
 NUCLEAR MODE SUMMARY
 ════════════════════════════════════════════════════════════
-✓ Remark Format        PASS   Formatted 15/15 files
-✓ Remark Lint          PASS   Linted 15 files
-✓ ESLint Fix           PASS   Auto-fixed code blocks
-✓ ESLint Lint          PASS   All code blocks valid
+✓ Remark Format        PASS             Formatted 15/15 files
+✓ ESLint Fix           PASS             Fixed code blocks
+✓ Validation           PASS             All checks passed
 ════════════════════════════════════════════════════════════
 🎉 All checks passed! Your markdown is pristine.
 ```
+
+**Example Output (Issues Found):**
+
+````
+🚀 NUCLEAR MODE ACTIVATED
+
+Processing 8 file(s) with comprehensive workflow...
+
+Step 1/3: Running remark formatting...
+  ✓ Formatted 8 file(s)
+  ℹ️  Some issues require manual fixes
+
+Step 2/3: Running ESLint auto-fix on code blocks...
+  ⚠️  ESLint found issues that need manual fixes
+
+Step 3/3: Running final validation...
+  ⚠️  Validation found remaining issues
+
+════════════════════════════════════════════════════════════
+REMAINING ISSUES
+════════════════════════════════════════════════════════════
+file.md
+  3:128  error  Line too long (max 80 chars)
+  17:1   error  Missing code block language flag
+
+════════════════════════════════════════════════════════════
+NUCLEAR MODE SUMMARY
+════════════════════════════════════════════════════════════
+✓ Remark Format        PASS             Formatted 8/8 files
+⚠️ ESLint Fix           NEEDS ATTENTION  Some issues remain
+⚠️ Validation           NEEDS ATTENTION  Issues found
+════════════════════════════════════════════════════════════
+
+📋 NEXT STEPS:
+   Review the issues above and fix them manually.
+   Common fixes:
+   • Shorten long lines (max 80 chars)
+   • Add language flags to code blocks (```js, ```bash, etc.)
+   • Fix filename issues (use lowercase, avoid special chars)
+   • Add blank lines between list items
+````
 
 ### Command Aliases
 
