@@ -42,6 +42,7 @@ export default {
     setext: false, // Use # instead of === underlines
     tightDefinitions: true, // No blank lines between definitions
     resourceLink: false, // Don't escape link URLs unnecessarily
+    break: 'spaces', // Use two spaces for line breaks instead of backslashes
   },
 
   plugins: [

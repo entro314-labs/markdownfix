@@ -160,7 +160,11 @@ async function processFiles(files, options = {}) {
           listItemIndent: 'one',
           rule: '-',
           strong: '*',
-          tightDefinitions: true
+          tightDefinitions: true,
+          handlers: {
+            // Custom handler to use two spaces for line breaks instead of backslashes
+            break: () => '  \n'
+          }
         });
       }
 
@@ -446,7 +450,7 @@ function isFileIgnored(filePath, ignorePatterns) {
     // Handle glob patterns
     if (pattern.includes('**')) {
       // **/*.config.js -> matches any .config.js file
-      const regex = new RegExp(pattern.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\./g, '\\.'));
+const regex = new RegExp(pattern.replace(/\./g, '\\.').replace(/\*\*/g, '__DOUBLESTAR__').replace(/\*/g, '[^/]*').replace(/__DOUBLESTAR__/g, '.*'));
       if (regex.test(filePath)) return true;
     } else if (pattern.includes('*')) {
       // *.js -> matches .js files in root
