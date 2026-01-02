@@ -1,6 +1,6 @@
 {
   "name": "@markdownkit/markdownkit",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Opinionated markdown formatter and linter for MD, MDX, MDC, and MDD files using Remark/Unified ecosystem",
   "type": "module",
   "repository": {
@@ -70,7 +70,7 @@
   "dependencies": {
     "@adobe/remark-gridtables": "^3.0.16",
     "@code-dot-org/remark-plugins": "^2.0.1",
-    "@markdownkit/remark-mdd": "^0.0.20",
+    "@markdownkit/remark-mdd": "^1.0.0",
     "@theguild/remark-mermaid": "^0.3.0",
     "eslint": "^9.39.2",
     "eslint-plugin-mdx": "^3.6.2",
