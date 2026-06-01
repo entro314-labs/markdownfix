@@ -1,31 +1,10 @@
-/**
- * Opinionated Remark configuration for markdown processing
- * Supports .md, .mdx, and .mdc files with consistent formatting
- * Optionally supports .mdd files if mdd package is installed
- */
-
-// Try to load MDD plugins if available
-let mddPlugins = []
-try {
-  const mddDocStructure = await import('@markdownkit/mdd/plugins/remark-mdd-document-structure.js')
-  const mddTextFormatting = await import('@markdownkit/mdd/plugins/remark-mdd-text-formatting.js')
-  const mddMdxConditional = await import('@markdownkit/mdd/plugins/remark-mdx-conditional.js')
-
-  mddPlugins = [mddMdxConditional.default, mddDocStructure.default, mddTextFormatting.default]
-  console.log('✓ MDD support enabled')
-} catch {
-  // MDD package not installed - only support .md, .mdx, and .mdc
-  mddPlugins = ['remark-mdx']
-  console.log('ℹ MDD support not available (install mdd package for .mdd file support)')
-}
-
 export default {
   // Configure remark-stringify output formatting
   settings: {
     bullet: '-', // Use - for unordered lists
     bulletOther: '*', // Use * for nested lists
     bulletOrdered: '.', // Use 1. 2. 3. for ordered lists
-    emphasis: '_', // Use _emphasis_ over *emphasis*
+    emphasis: '*', // Use *emphasis* over _emphasis_
     strong: '*', // Use **strong** over __strong__
     fence: '`', // Use ``` for code fences
     fences: true, // Use fences for code blocks (disabled for MDX in cli.js)
@@ -48,22 +27,25 @@ export default {
     // Enable GitHub Flavored Markdown (tables, strikethrough, etc.)
     'remark-gfm',
 
+    // Parse MDX content when present
+    'remark-mdx',
+
     // Enable MDC syntax (Markdown Components for Nuxt Content)
     'remark-mdc',
 
-    // MDX/MDD plugins (loaded dynamically above)
-    ...mddPlugins,
+    // MDD semantic plugins are no-ops outside .mdd files
+    '@markdownkit/remark-mdd/plugins/document-structure',
+    '@markdownkit/remark-mdd/plugins/text-formatting',
 
     // Apply consistent style presets
     'remark-preset-lint-consistent',
     'remark-preset-lint-recommended',
-    'remark-preset-lint-markdown-style-guide',
 
     // Lint rules
     ['remark-lint-heading-increment', true], // MD001
     ['remark-lint-no-duplicate-headings', true], // MD024
     ['remark-lint-no-emphasis-as-heading', true], // MD036
-    ['remark-lint-emphasis-marker', '_'],
+    ['remark-lint-emphasis-marker', '*'],
     ['remark-lint-strong-marker', '*'],
     ['remark-lint-heading-style', 'atx'],
     ['remark-lint-list-item-indent', 'one'],

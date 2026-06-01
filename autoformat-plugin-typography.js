@@ -18,14 +18,14 @@ export default {
       name: 'em-dash',
       description: 'Convert double hyphens to em dash',
       pattern: /(\w)--(\w)/g,
-      transform: (match) => `${match[1]}—${match[2]}`,
+      transform: (match) => `${match[1]} - ${match[2]}`,
     },
 
     {
       name: 'en-dash-ranges',
       description: 'Convert hyphens in number ranges to en dash',
       pattern: /(\d+)-(\d+)/g,
-      transform: (match) => `${match[1]}–${match[2]}`,
+      transform: (match) => `${match[1]} - ${match[2]}`,
     },
 
     {
@@ -112,8 +112,8 @@ export default {
  * TRANSFORMATIONS:
  *
  * Before:                  After:
- * word--word               word—word
- * pages 10-20              pages 10–20
+ * word--word               word - word
+ * pages 10-20              pages 10 - 20
  * Product(TM)              Product™
  * Company(R)               Company®
  * Copyright (C) 2024       Copyright © 2024

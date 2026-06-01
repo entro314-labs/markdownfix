@@ -84,3 +84,9 @@ OXLINT_MDX_INTEGRATION.md
 enhancement.md
 unformatted-text.md
 formatted-text.md
+test/cases/draft-quality/input.txt
+test/cases/draft-header/input.txt
+test/cases/plugins/input.txt
+test/cases/quiet/input.txt
+test/cases/recursive/sub/nested.txt
+test/cases/semantic/input.txt

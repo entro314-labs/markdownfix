@@ -7,29 +7,37 @@
 
 import { execSync } from 'node:child_process'
 import fs from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { validateDocument } from '@markdownkit/remark-mdd/validator'
 import { glob } from 'glob'
 import { remark } from 'remark'
-import remarkFrontmatter from 'remark-frontmatter'
-import remarkGfm from 'remark-gfm'
-import remarkPresetLintConsistent from 'remark-preset-lint-consistent'
-import remarkPresetLintMarkdownStyleGuide from 'remark-preset-lint-markdown-style-guide'
-import remarkPresetLintRecommended from 'remark-preset-lint-recommended'
-import remarkStringify from 'remark-stringify'
 import remarkTypography from 'remark-typography'
 import { read } from 'to-vfile'
 import { reporter } from 'vfile-reporter'
 
+import { createAutoformatOptions, createDraftOptions } from './command-presets.js'
+import { createMarkdownkitRemarkProcessor, formatMarkdownText } from './remark-processor.js'
 import { TextProcessor } from './text-processor.js'
 
 const MARKDOWN_EXTENSIONS = ['md', 'mdx', 'mdc', 'mdd']
 const TEXT_EXTENSIONS_PATTERN = '**/*.{txt,md,mdx,mdc,mdd}'
 const VALUE_OPTIONS = new Set(['--glob', '--width', '--header-level', '--plugins'])
 const DEFAULT_CONCURRENCY = 4
+const DEFAULT_IGNORE_PATTERNS = ['node_modules/**', '.git/**']
+const packageRequire = createRequire(import.meta.url)
 
-let remarkConfigLoaded = false
+const remarkConfigCache = new Map()
+
+/**
+ * Keep technical snake_case tokens readable after markdown stringification.
+ * Example: usr\_abc -> usr_abc, statement\_timeout -> statement_timeout.
+ */
+function normalizeTechnicalUnderscores(text) {
+  return text.replace(/([\p{L}\p{N}])\\_([\p{L}\p{N}])/gu, '$1_$2')
+}
 
 /**
  * Run async work items with a fixed concurrency limit.
@@ -98,35 +106,127 @@ function parseCommandArgs(commandArgs) {
 }
 
 /**
- * Lazily load project-level .remarkrc.js if present.
+ * Load project-level remark config if present.
  */
-async function ensureRemarkConfigLoaded(options = {}) {
-  const { quiet = false } = options
-
-  if (remarkConfigLoaded) {
-    return
+async function loadRemarkConfig(cwd = process.cwd()) {
+  const resolvedCwd = path.resolve(cwd)
+  if (remarkConfigCache.has(resolvedCwd)) {
+    return remarkConfigCache.get(resolvedCwd)
   }
 
-  const originalLog = console.log
-  const originalInfo = console.info
-  console.log = () => {}
-  console.info = () => {}
+  const candidates = ['.remarkrc.js', '.remarkrc.mjs', '.remarkrc.cjs']
+  let currentDir = resolvedCwd
+
+  while (true) {
+    if (remarkConfigCache.has(currentDir)) {
+      const cached = remarkConfigCache.get(currentDir)
+      remarkConfigCache.set(resolvedCwd, cached)
+      return cached
+    }
+
+    for (const candidate of candidates) {
+      const configPath = path.join(currentDir, candidate)
+
+      try {
+        await fs.access(configPath)
+        const module = await import(pathToFileURL(configPath).href)
+        const config = module.default ?? module
+        remarkConfigCache.set(currentDir, config)
+        remarkConfigCache.set(resolvedCwd, config)
+        return config
+      } catch (err) {
+        if (err?.code !== 'ENOENT') {
+          throw err
+        }
+      }
+    }
+
+    const parentDir = path.dirname(currentDir)
+    if (parentDir === currentDir) {
+      break
+    }
+    currentDir = parentDir
+  }
+
+  remarkConfigCache.set(resolvedCwd, null)
+  return null
+}
+
+async function loadRemarkIgnorePatterns(cwd = process.cwd()) {
+  const ignorePath = path.join(cwd, '.remarkignore')
 
   try {
-    await import(path.join(process.cwd(), '.remarkrc.js'))
-  } catch {
-    if (!quiet) {
-      console.log = originalLog
-      console.info = originalInfo
-      console.warn('⚠️  No .remarkrc.js found in current directory, using default config')
-      console.log = () => {}
-      console.info = () => {}
+    const content = await fs.readFile(ignorePath, 'utf-8')
+    const patterns = content
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('#'))
+
+    return [...DEFAULT_IGNORE_PATTERNS, ...patterns]
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      return DEFAULT_IGNORE_PATTERNS
     }
-  } finally {
-    console.log = originalLog
-    console.info = originalInfo
-    remarkConfigLoaded = true
+
+    throw err
   }
+}
+
+async function resolveConfiguredPlugin(pluginEntry, cwd) {
+  if (typeof pluginEntry !== 'string') {
+    return pluginEntry
+  }
+
+  const requireFromCwd = createRequire(path.join(cwd, '__markdownkit__.cjs'))
+  let resolvedPath
+
+  try {
+    resolvedPath = requireFromCwd.resolve(pluginEntry)
+  } catch {
+    resolvedPath = packageRequire.resolve(pluginEntry)
+  }
+
+  const module = await import(pathToFileURL(resolvedPath).href)
+  return module.default ?? module
+}
+
+async function createConfiguredProcessor(options = {}) {
+  const { filePath = '', lintOnly = false, typography = false, cwd = process.cwd() } = options
+  const config = await loadRemarkConfig(cwd)
+
+  if (!config?.plugins) {
+    return createMarkdownkitRemarkProcessor({
+      filePath,
+      lintOnly,
+      typography,
+      strict: true,
+      stringifySettings: config?.settings ?? {},
+    })
+  }
+
+  let processor = remark()
+
+  if (config.settings) {
+    processor = processor.data('settings', config.settings)
+  }
+
+  for (const pluginEntry of config.plugins) {
+    if (Array.isArray(pluginEntry)) {
+      const [pluginName, pluginOptions] = pluginEntry
+      const plugin = await resolveConfiguredPlugin(pluginName, cwd)
+      processor = processor.use(plugin, pluginOptions)
+      continue
+    }
+
+    const plugin = await resolveConfiguredPlugin(pluginEntry, cwd)
+    processor = processor.use(plugin)
+  }
+
+  if (typography) {
+    processor = processor.use(remarkTypography)
+  }
+
+  return processor
 }
 
 /**
@@ -134,14 +234,16 @@ async function ensureRemarkConfigLoaded(options = {}) {
  */
 async function resolveTextInputFiles(fileArgs, options = {}) {
   const { globPattern = null, recursive = false } = options
+  const ignore = await loadRemarkIgnorePatterns()
 
   if (globPattern) {
-    return glob(globPattern, { ignore: ['node_modules/**', '.git/**'] })
+    return glob(globPattern, { ignore, nodir: true })
   }
 
   if (fileArgs.length === 0) {
     return glob(TEXT_EXTENSIONS_PATTERN, {
-      ignore: ['node_modules/**', '.git/**'],
+      ignore,
+      nodir: true,
     })
   }
 
@@ -162,7 +264,8 @@ async function resolveTextInputFiles(fileArgs, options = {}) {
 
       const pattern = path.join(inputPath, TEXT_EXTENSIONS_PATTERN)
       const dirFiles = await glob(pattern, {
-        ignore: ['node_modules/**', '.git/**'],
+        ignore,
+        nodir: true,
       })
       filesToProcess.push(...dirFiles)
     } else {
@@ -258,6 +361,11 @@ async function formatFiles(processor, files, options = {}) {
 
   const results = await mapWithConcurrency(files, concurrency, async (file) => {
     try {
+      const stat = await fs.stat(file)
+      if (!stat.isFile()) {
+        throw new Error('Target is not a regular file')
+      }
+
       const content = await fs.readFile(file, 'utf-8')
       const formatted = await processor.process(content)
       if (write) {
@@ -374,12 +482,34 @@ For more information, visit: https://github.com/entro314-labs/markdownkit
  * Get files to process
  */
 async function getFiles(args, globPattern) {
+  const ignore = await loadRemarkIgnorePatterns()
+
   if (globPattern) {
-    return glob(globPattern, { ignore: 'node_modules/**' })
+    return glob(globPattern, {
+      ignore,
+      nodir: true,
+    })
   }
 
   if (args.length > 0) {
-    return args
+    const files = []
+
+    for (const inputPath of args) {
+      const stat = await fs.stat(inputPath)
+
+      if (stat.isDirectory()) {
+        const pattern = path.join(inputPath, `**/*.{${MARKDOWN_EXTENSIONS.join(',')}}`)
+        const dirFiles = await glob(pattern, {
+          ignore,
+          nodir: true,
+        })
+        files.push(...dirFiles)
+      } else {
+        files.push(inputPath)
+      }
+    }
+
+    return files
   }
 
   // Default: find all markdown files in current directory and subdirectories
@@ -388,7 +518,8 @@ async function getFiles(args, globPattern) {
 
   for (const pattern of patterns) {
     const files = await glob(pattern, {
-      ignore: ['node_modules/**', '.git/**'],
+      ignore,
+      nodir: true,
     })
     allFiles.push(...files)
   }
@@ -399,44 +530,56 @@ async function getFiles(args, globPattern) {
 /**
  * Create a configured remark processor
  */
-function createRemarkProcessor(options = {}) {
-  const { lintOnly = false, typography = false } = options
-
-  // Build processor
-  let processor = remark().use(remarkFrontmatter, ['yaml']).use(remarkGfm)
-
-  // Add lint presets
-  processor = processor
-    .use(remarkPresetLintRecommended)
-    .use(remarkPresetLintConsistent)
-    .use(remarkPresetLintMarkdownStyleGuide)
-
-  if (typography) {
-    processor = processor.use(remarkTypography)
-  }
-
-  // Add stringify for formatting (unless lint-only)
-  if (!lintOnly) {
-    processor = processor.use(remarkStringify, {
-      bullet: '-',
-      emphasis: '_',
-      fences: true,
-      listItemIndent: 'one',
-      rule: '-',
-      strong: '*',
-      tightDefinitions: true,
-      handlers: {
-        break: () => '  \n',
-      },
-    })
-  }
-
-  return processor
+async function createRemarkProcessor(options = {}) {
+  return createConfiguredProcessor(options)
 }
 
 /**
  * Process files with remark
  */
+/**
+ * Process a single .mdd file: validate against the canonical MDD contract and
+ * format with the MDD-safe formatter.
+ *
+ * @param {string} filePath
+ * @param {{ write: boolean, lintOnly: boolean }} options
+ */
+async function processMddFile(filePath, { write, lintOnly }) {
+  const content = await fs.readFile(filePath, 'utf8')
+  const normalized = content.replace(/\r\n/g, '\n')
+  const validation = validateDocument(normalized, { strict: false })
+
+  const lines = []
+  for (const error of validation.errors) {
+    const loc = error.location?.line ? ` (line ${error.location.line})` : ''
+    lines.push(`  error    [${error.code}] ${error.message}${loc}`)
+  }
+  for (const warning of validation.warnings) {
+    const loc = warning.location?.line ? ` (line ${warning.location.line})` : ''
+    lines.push(`  warning  [${warning.code}] ${warning.message}${loc}`)
+  }
+  const reportText = lines.length > 0 ? `${filePath}\n${lines.join('\n')}` : null
+
+  let outputText = content
+  if (!lintOnly) {
+    outputText = await formatMarkdownText(content, {
+      filePath,
+      cwd: path.dirname(path.resolve(filePath)),
+    })
+    if (write) {
+      await fs.writeFile(filePath, outputText)
+    }
+  }
+
+  return {
+    filePath,
+    success: true,
+    reportText,
+    outputText,
+    mddHasErrors: validation.errors.length > 0,
+  }
+}
+
 async function processFiles(files, options = {}) {
   const {
     write = false,
@@ -446,34 +589,35 @@ async function processFiles(files, options = {}) {
     concurrency = DEFAULT_CONCURRENCY,
   } = options
 
-  await ensureRemarkConfigLoaded({ quiet })
-
   let hasErrors = false
   let processedCount = 0
 
   const outcomes = await mapWithConcurrency(files, concurrency, async (filePath) => {
     try {
-      const file = await read(filePath)
-      let processor = createRemarkProcessor({ lintOnly, typography })
-
-      if (!lintOnly && (filePath.endsWith('.mdx') || filePath.endsWith('.mdd'))) {
-        processor = processor.use(remarkStringify, {
-          bullet: '-',
-          emphasis: '_',
-          fences: false,
-          listItemIndent: 'one',
-          rule: '-',
-          strong: '*',
-          tightDefinitions: true,
-          handlers: {
-            break: () => '  \n',
-          },
-        })
+      const stat = await fs.stat(filePath)
+      if (!stat.isFile()) {
+        throw new Error('Target is not a regular file')
       }
+
+      // `.mdd` is handled by the dedicated MDD pipeline: validate against the
+      // canonical remark-mdd contract (surfacing the SAME errors as mdd-validate
+      // and the LSP) and format via the MDD-safe formatter (no MDX/MDC parsing,
+      // no one-way transform). This eliminates the cross-tool "valid here,
+      // invalid there" drift and the source-corrupting format round-trip.
+      if (path.extname(filePath).toLowerCase() === '.mdd') {
+        return await processMddFile(filePath, { write, lintOnly })
+      }
+
+      const file = await read(filePath)
+      const processor = await createRemarkProcessor({
+        lintOnly,
+        typography,
+        filePath,
+      })
 
       const result = await processor.process(file)
       const reportText = result.messages.length > 0 ? reporter(result) : null
-      const outputText = String(result)
+      const outputText = normalizeTechnicalUnderscores(String(result))
 
       if (write && !lintOnly) {
         await fs.writeFile(filePath, outputText)
@@ -507,7 +651,12 @@ async function processFiles(files, options = {}) {
       if (!quiet) {
         console.error(outcome.reportText)
       }
-      hasErrors = true
+      // For .mdd outcomes, only hard errors fail the run; recommendation
+      // warnings are informational. Non-mdd outcomes (mddHasErrors undefined)
+      // keep the original behavior of failing on any reported message.
+      if (outcome.mddHasErrors !== false) {
+        hasErrors = true
+      }
     }
 
     if (write && !lintOnly) {
@@ -778,7 +927,7 @@ export default {
     'remark-preset-lint-markdown-style-guide',
 
     // Formatting rules
-    ['remark-lint-emphasis-marker', '_'],
+    ['remark-lint-emphasis-marker', '*'],
     ['remark-lint-strong-marker', '*'],
     ['remark-lint-unordered-list-marker-style', '-'],
     ['remark-lint-ordered-list-marker-style', '.'],
@@ -787,7 +936,7 @@ export default {
     // Stringify options for formatting
     ['remark-stringify', {
       bullet: '-',
-      emphasis: '_',
+      emphasis: '*',
       fences: true,
       listItemIndent: 'one',
       rule: '-',
@@ -991,16 +1140,15 @@ async function main() {
       }
 
       // Initialize text processor with options
-      const processor = new TextProcessor({
-        nlp: false,
-        firstLineTitle: true,
-        detectLabels: true,
-        semanticBreaks,
-        smartQuotes,
-        smartEllipsis: ellipsis,
-        wrapWidth,
-        customRules,
-      })
+      const processor = new TextProcessor(
+        createAutoformatOptions({
+          semanticBreaks,
+          smartQuotes,
+          smartEllipsis: ellipsis,
+          wrapWidth,
+          customRules,
+        }),
+      )
 
       // Format files
       const results = await formatFiles(processor, filesToProcess, {
@@ -1071,20 +1219,14 @@ async function main() {
       }
 
       // Initialize text processor with draft mode enabled
-      const processor = new TextProcessor({
-        nlp: true,
-        firstLineTitle: true,
-        smartTitleDetection: true,
-        normalizeHeadings: true,
-        detectLabels: true,
-        detectFolders: true,
-        detectLists: true,
-        reflowParagraphs: true,
-        correctCommonTypos: true,
-        headerLevel,
-      })
+      const processor = new TextProcessor(
+        createDraftOptions({
+          headerLevel,
+        }),
+      )
 
       if (dryRun) {
+        let previewHadErrors = false
         // Preview mode - show output without writing
         for (const filePath of filesToProcess) {
           try {
@@ -1095,25 +1237,13 @@ async function main() {
             // Optionally run through remark pipeline
             let finalContent = formatted
             if (polish) {
-              await ensureRemarkConfigLoaded({ quiet: options.quiet })
-              const processor = createRemarkProcessor({ lintOnly: false, typography: true })
-
-              // Handle MDX/MDD specifics for polish if needed
-              if (filePath.endsWith('.mdx') || filePath.endsWith('.mdd')) {
-                processor.use(remarkStringify, {
-                  bullet: '-',
-                  emphasis: '_',
-                  fences: false,
-                  listItemIndent: 'one',
-                  rule: '-',
-                  strong: '*',
-                  tightDefinitions: true,
-                  handlers: { break: () => '  \n' },
-                })
-              }
-
-              const result = await processor.process({ path: filePath, value: formatted })
-              finalContent = String(result)
+              const remarkProcessor = await createRemarkProcessor({
+                lintOnly: false,
+                typography: true,
+                filePath,
+              })
+              const result = await remarkProcessor.process({ path: filePath, value: formatted })
+              finalContent = normalizeTechnicalUnderscores(String(result))
             }
 
             console.log(`\n${'═'.repeat(60)}`)
@@ -1121,10 +1251,11 @@ async function main() {
             console.log('═'.repeat(60))
             console.log(finalContent)
           } catch (err) {
+            previewHadErrors = true
             console.error(`✗ Error processing ${filePath}:`, err.message)
           }
         }
-        return
+        process.exit(previewHadErrors ? 1 : 0)
       }
 
       // Write mode

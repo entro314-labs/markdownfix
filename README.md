@@ -85,7 +85,7 @@ markdownkit setup
 
 ### Emphasis
 
-- **Italic**: `_text_` (underscore, not asterisk)
+- **Italic**: `*text*` (asterisk, not underscore)
 - **Bold**: `**text**` (double asterisk, not underscore)
 
 ### Headings

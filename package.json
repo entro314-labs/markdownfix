@@ -1,6 +1,6 @@
 {
   "name": "@markdownkit/markdownkit",
-  "version": "2.2.0",
+  "version": "2.3.1",
   "description": "Opinionated markdown formatter and linter for MD, MDX, MDC, and MDD files using Remark/Unified ecosystem",
   "keywords": [
     "formatter",
@@ -39,6 +39,8 @@
     ".oxlint-mdxrc.json",
     "setup.js",
     "cli.js",
+    "command-presets.js",
+    "remark-processor.js",
     "text-processor.js",
     "README.md",
     "OXLINT_MDX_INTEGRATION.md",
@@ -48,6 +50,8 @@
   "exports": {
     ".": "./text-processor.js",
     "./text-processor": "./text-processor.js",
+    "./command-presets": "./command-presets.js",
+    "./remark-processor": "./remark-processor.js",
     "./setup": "./setup.js",
     "./cli": "./cli.js"
   },
@@ -76,18 +80,18 @@
     "check:full": "pnpm run check && pnpm run test"
   },
   "dependencies": {
-    "@adobe/remark-gridtables": "^3.0.18",
+    "@adobe/remark-gridtables": "^3.0.20",
     "@code-dot-org/remark-plugins": "^2.0.1",
-    "@markdownkit/oxlint-mdx": "^2.1.1",
-    "@markdownkit/remark-mdd": "^2.1.0",
+    "@markdownkit/oxlint-mdx": "^2.2.0",
+    "@markdownkit/remark-mdd": "^2.2.0",
     "@theguild/remark-mermaid": "^0.3.0",
-    "fumadocs-docgen": "^3.0.8",
+    "fumadocs-docgen": "^3.0.10",
     "glob": "^13.0.6",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.2.0",
     "rehype-remark": "^10.0.1",
     "remark": "latest",
     "remark-directive": "^4.0.0",
-    "remark-docx": "^0.3.26",
+    "remark-docx": "^0.3.28",
     "remark-emoji": "^5.0.2",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
@@ -129,7 +133,7 @@
     "remark-lint-table-pipe-alignment": "^4.1.1",
     "remark-lint-table-pipes": "^5.0.1",
     "remark-lint-unordered-list-marker-style": "^4.0.1",
-    "remark-mdc": "^3.10.0",
+    "remark-mdc": "^3.11.0",
     "remark-mdx": "^3.1.1",
     "remark-mdx-frontmatter": "^5.2.0",
     "remark-preset-lint-consistent": "^6.0.1",
@@ -154,12 +158,12 @@
   },
   "devDependencies": {
     "markdown-link-check": "^3.14.2",
-    "oxfmt": "^0.41.0",
-    "oxlint": "^1.56.0",
-    "oxlint-tsgolint": "^0.17.1",
+    "oxfmt": "^0.52.0",
+    "oxlint": "^1.67.0",
+    "oxlint-tsgolint": "^0.23.0",
     "remark-cli": "^12.0.1"
   },
   "engines": {
-    "node": ">=22.x"
+    "node": ">=24.x"
   }
 }

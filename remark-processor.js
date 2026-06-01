@@ -1,0 +1,306 @@
+import fs from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+
+import { remark } from 'remark'
+import remarkFrontmatter from 'remark-frontmatter'
+import remarkGfm from 'remark-gfm'
+import remarkMdc from 'remark-mdc'
+import remarkMdx from 'remark-mdx'
+import remarkPresetLintConsistent from 'remark-preset-lint-consistent'
+import remarkPresetLintMarkdownStyleGuide from 'remark-preset-lint-markdown-style-guide'
+import remarkPresetLintRecommended from 'remark-preset-lint-recommended'
+import remarkStringify from 'remark-stringify'
+import remarkTypography from 'remark-typography'
+
+export const RICH_MARKDOWN_EXTENSIONS = new Set(['.mdx', '.mdc', '.mdd'])
+
+export const DEFAULT_STRINGIFY_OPTIONS = {
+  bullet: '-',
+  emphasis: '*',
+  fences: true,
+  listItemIndent: 'one',
+  rule: '-',
+  strong: '*',
+  tightDefinitions: true,
+  handlers: {
+    break: () => '  \n',
+  },
+}
+
+const packageRequire = createRequire(import.meta.url)
+const remarkConfigCache = new Map()
+
+export function shouldUseMarkdownStyleGuide(filePath = '') {
+  const extension = path.extname(filePath).toLowerCase()
+  return !RICH_MARKDOWN_EXTENSIONS.has(extension)
+}
+
+export function getStringifyOptions(filePath = '') {
+  const extension = path.extname(filePath).toLowerCase()
+
+  if (extension === '.mdx' || extension === '.mdd') {
+    return {
+      ...DEFAULT_STRINGIFY_OPTIONS,
+      fences: false,
+    }
+  }
+
+  return DEFAULT_STRINGIFY_OPTIONS
+}
+
+export function remarkConditionalMarkdownStyleGuide() {
+  const styleGuideProcessor = remark().use(remarkPresetLintMarkdownStyleGuide).freeze()
+
+  return async function transformer(tree, file) {
+    if (!shouldUseMarkdownStyleGuide(file.path ?? '')) {
+      return
+    }
+
+    await styleGuideProcessor.run(tree, file)
+  }
+}
+
+async function loadRemarkConfig(cwd = process.cwd()) {
+  const resolvedCwd = path.resolve(cwd)
+  if (remarkConfigCache.has(resolvedCwd)) {
+    return remarkConfigCache.get(resolvedCwd)
+  }
+
+  const candidates = ['.remarkrc.js', '.remarkrc.mjs', '.remarkrc.cjs']
+  let currentDir = resolvedCwd
+
+  while (true) {
+    if (remarkConfigCache.has(currentDir)) {
+      const cached = remarkConfigCache.get(currentDir)
+      remarkConfigCache.set(resolvedCwd, cached)
+      return cached
+    }
+
+    for (const candidate of candidates) {
+      const configPath = path.join(currentDir, candidate)
+
+      try {
+        await fs.access(configPath)
+        const module = await import(pathToFileURL(configPath).href)
+        const config = module.default ?? module
+        remarkConfigCache.set(currentDir, config)
+        remarkConfigCache.set(resolvedCwd, config)
+        return config
+      } catch (err) {
+        if (err?.code !== 'ENOENT') {
+          throw err
+        }
+      }
+    }
+
+    const parentDir = path.dirname(currentDir)
+    if (parentDir === currentDir) {
+      break
+    }
+    currentDir = parentDir
+  }
+
+  remarkConfigCache.set(resolvedCwd, null)
+  return null
+}
+
+async function resolveConfiguredPlugin(pluginEntry, cwd) {
+  if (typeof pluginEntry !== 'string') {
+    return pluginEntry
+  }
+
+  const requireFromCwd = createRequire(path.join(cwd, '__markdownkit__.cjs'))
+  let resolvedPath
+
+  try {
+    resolvedPath = requireFromCwd.resolve(pluginEntry)
+  } catch {
+    resolvedPath = packageRequire.resolve(pluginEntry)
+  }
+
+  const module = await import(pathToFileURL(resolvedPath).href)
+  return module.default ?? module
+}
+
+/** Dialect/parse plugins that must only run for their matching file extension. */
+const EXTENSION_SCOPED_PLUGINS = new Map([
+  ['remark-mdx', '.mdx'],
+  ['remark-mdc', '.mdc'],
+])
+
+/** One-way MDD transform plugins — never applied in the format/lint pipeline. */
+const MDD_TRANSFORM_PLUGINS = new Set([
+  '@markdownkit/remark-mdd/plugins/document-structure',
+  '@markdownkit/remark-mdd/plugins/text-formatting',
+])
+
+/**
+ * Drop dialect plugins that do not match the file's extension and the one-way
+ * MDD transform plugins. MDX/MDC are parser extensions: applying remark-mdx to
+ * a `.mdd` file crashes on `{.class}` and remark-mdc rewrites `::directives`.
+ * The MDD transform plugins emit HTML markers and would corrupt `.mdd` source
+ * if stringified back — `.mdd` rendering is delegated to @markdownkit/mdd.
+ *
+ * @param {Array<unknown>} plugins
+ * @param {string} filePath
+ * @returns {Array<unknown>}
+ */
+function filterPluginsForFile(plugins, filePath) {
+  const extension = path.extname(filePath).toLowerCase()
+  return plugins.filter((entry) => {
+    const name = Array.isArray(entry) ? entry[0] : entry
+    if (typeof name !== 'string') {
+      return true
+    }
+    if (MDD_TRANSFORM_PLUGINS.has(name)) {
+      return false
+    }
+    const requiredExtension = EXTENSION_SCOPED_PLUGINS.get(name)
+    if (requiredExtension && requiredExtension !== extension) {
+      return false
+    }
+    return true
+  })
+}
+
+async function createConfiguredMarkdownkitRemarkProcessor(options = {}) {
+  const { filePath = '', lintOnly = false, typography = false, cwd = process.cwd() } = options
+  const config = await loadRemarkConfig(cwd)
+
+  if (!config?.plugins) {
+    return createMarkdownkitRemarkProcessor({
+      ...options,
+      filePath,
+      lintOnly,
+      typography,
+      stringifySettings: config?.settings ?? {},
+    })
+  }
+
+  let processor = remark()
+
+  if (config.settings) {
+    processor = processor.data('settings', config.settings)
+  }
+
+  for (const pluginEntry of filterPluginsForFile(config.plugins, filePath)) {
+    if (Array.isArray(pluginEntry)) {
+      const [pluginName, pluginOptions] = pluginEntry
+      const plugin = await resolveConfiguredPlugin(pluginName, cwd)
+      processor = processor.use(plugin, pluginOptions)
+      continue
+    }
+
+    const plugin = await resolveConfiguredPlugin(pluginEntry, cwd)
+    processor = processor.use(plugin)
+  }
+
+  if (typography) {
+    processor = processor.use(remarkTypography)
+  }
+
+  return processor
+}
+
+export function createMarkdownkitRemarkProcessor(options = {}) {
+  const {
+    filePath = 'document.md',
+    frontmatter = true,
+    gfm = true,
+    mdc = true,
+    mdx = true,
+    lint = true,
+    strict = true,
+    lintOnly = false,
+    typography = false,
+    stringifySettings = {},
+  } = options
+
+  // MDX and MDC hook the PARSER (micromark extensions), so they must be
+  // selected by file extension at build time — they cannot be gated after
+  // parsing. Applying remark-mdx to a `.mdd` file crashes on `{.class}`
+  // annotations, and remark-mdc rewrites `::directive` blocks. Each dialect is
+  // therefore applied only to its own extension. The one-way MDD transform
+  // plugins are intentionally NOT applied here: they emit HTML markers for
+  // preview/conversion and would corrupt the source if stringified back.
+  // `.mdd` rendering is delegated to @markdownkit/mdd.
+  const extension = path.extname(filePath).toLowerCase()
+
+  let processor = remark()
+
+  if (frontmatter) {
+    processor = processor.use(remarkFrontmatter, ['yaml'])
+  }
+
+  if (gfm) {
+    // On `.mdd`, disable single-tilde strikethrough so MDD subscripts (`~x~`)
+    // are preserved rather than being rewritten to GFM strikethrough (`~~x~~`).
+    processor = processor.use(remarkGfm, extension === '.mdd' ? { singleTilde: false } : undefined)
+  }
+
+  if (mdx && extension === '.mdx') {
+    processor = processor.use(remarkMdx)
+  } else if (mdc && extension === '.mdc') {
+    processor = processor.use(remarkMdc)
+  }
+
+  if (lint) {
+    processor = processor.use(remarkPresetLintRecommended)
+    processor = processor.use(remarkPresetLintConsistent)
+
+    if (strict) {
+      processor = processor.use(remarkConditionalMarkdownStyleGuide)
+    }
+  }
+
+  if (typography) {
+    processor = processor.use(remarkTypography)
+  }
+
+  if (!lintOnly) {
+    processor = processor.use(remarkStringify, {
+      ...getStringifyOptions(filePath),
+      ...stringifySettings,
+    })
+  }
+
+  return processor
+}
+
+export async function formatMarkdownText(text, options = {}) {
+  const filePath = options.filePath ?? 'document.md'
+  const cwd = options.cwd ?? (path.isAbsolute(filePath) ? path.dirname(filePath) : process.cwd())
+
+  // `.mdd` uses the dedicated MDD-safe processor (no MDX/MDC parsing, no
+  // single-tilde strikethrough, no one-way transform) rather than the generic
+  // markdown-oriented .remarkrc config, so directives, semantic classes, and
+  // sub/superscripts survive a format round-trip intact.
+  const processor =
+    path.extname(filePath).toLowerCase() === '.mdd'
+      ? createMarkdownkitRemarkProcessor({ ...options, filePath, lintOnly: false })
+      : await createConfiguredMarkdownkitRemarkProcessor({
+          ...options,
+          filePath,
+          cwd,
+          lintOnly: false,
+        })
+
+  const result = await processor.process({
+    value: text,
+    path: filePath,
+  })
+
+  let output = String(result)
+
+  // On `.mdd`, remark-stringify escapes `~` (a GFM strikethrough delimiter),
+  // which would break MDD subscript syntax (`~x~`). In MDD, `~` is the
+  // subscript delimiter, so restoring the literal tilde is safe and preserves
+  // semantics for the downstream MDD renderer/validator.
+  if (path.extname(filePath).toLowerCase() === '.mdd') {
+    output = output.replace(/\\~/g, '~')
+  }
+
+  return output
+}

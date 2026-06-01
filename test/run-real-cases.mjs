@@ -28,6 +28,34 @@ async function main() {
   const results = []
 
   {
+    const caseDir = path.join(workRoot, 'cases', 'nodir')
+    const r = run(['nuclear'], caseDir)
+    const combined = `${r.stdout}\n${r.stderr}`
+    const pass = !/EISDIR|illegal operation on a directory/.test(combined)
+
+    results.push(
+      row('nuclear-ignores-extension-like-directories', pass, {
+        exit: r.status,
+        stdoutSnippet: r.stdout.split('\n').slice(0, 10).join('\n'),
+      }),
+    )
+  }
+
+  {
+    const filePath = path.join(workRoot, 'cases', 'mdx-profile', 'input.mdx')
+    const r = run(['lint', filePath])
+    const combined = `${r.stdout}\n${r.stderr}`
+    const pass = !combined.includes('file-extension')
+
+    results.push(
+      row('mdx-lint-profile-no-md-only-extension-warning', pass, {
+        exit: r.status,
+        stdoutSnippet: combined.split('\n').slice(0, 10).join('\n'),
+      }),
+    )
+  }
+
+  {
     const filePath = path.join(workRoot, 'cases', 'quiet', 'input.txt')
     const r = run(['autoformat', '-q', filePath])
     const pass =

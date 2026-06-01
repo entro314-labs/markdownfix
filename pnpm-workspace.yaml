@@ -1,5 +1,9 @@
 packages:
   - 'vscode-extension'
 
+allowBuilds:
+  core-js: true
+
 onlyBuiltDependencies:
   - core-js
+minimumReleaseAge: 0

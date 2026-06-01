@@ -159,7 +159,7 @@ Use periods (\`.\`) for ordered lists:
 
 ## Emphasis
 
-- Use \`_underscores_\` for _emphasis_
+- Use \`*asterisks*\` for *emphasis*
 - Use \`**asterisks**\` for **strong emphasis**
 
 ## Code
