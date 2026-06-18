@@ -5,7 +5,7 @@
  * Provides commands to format, lint, and check markdown files
  */
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -767,38 +767,72 @@ async function runNuclearMode(files, options = {}) {
   // Step 3: oxlint-mdx auto-fix (only if available)
   if (hasOxlintMdx) {
     if (!quiet) console.log('Step 3/4: Running oxlint-mdx auto-fix...')
+
+    // Parse the structured JSON report so remaining-issue counts are accurate,
+    // rather than substring-matching the human-readable output (which contains
+    // the words "error"/"warning" as severity labels regardless).
+    const parseOxlintMdxSummary = (raw) => {
+      if (!raw) return null
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && parsed.summary) {
+          return parsed.summary
+        }
+      } catch {
+        // not JSON
+      }
+      return null
+    }
+
+    // Pass file paths as an argument array (execFileSync, no shell) so file
+    // names cannot be interpreted as shell metacharacters.
+    let stdout = ''
+    let runError = null
     try {
-      const fileList = filteredFiles.map((f) => `"${f}"`).join(' ')
-      const oxlintMdxCmd = `npx oxlint-mdx --fix ${fileList}`
-      execSync(oxlintMdxCmd, { stdio: 'pipe' })
+      stdout = execFileSync('npx', ['oxlint-mdx', '--fix', '--format', 'json', ...filteredFiles], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).toString()
+    } catch (err) {
+      runError = err
+      stdout = err.stdout?.toString() ?? ''
+    }
+
+    const summary = parseOxlintMdxSummary(stdout)
+
+    if (summary) {
+      const remaining = (summary.errors ?? 0) + (summary.warnings ?? 0)
+      if (remaining === 0) {
+        steps.push({
+          name: 'oxlint-mdx Fix',
+          success: true,
+          details: 'Fixed markdown/MDX code issues',
+        })
+        if (!quiet) console.log('  ✓ oxlint-mdx auto-fix completed\n')
+      } else {
+        steps.push({
+          name: 'oxlint-mdx Fix',
+          success: false,
+          details: `${summary.errors ?? 0} error(s), ${summary.warnings ?? 0} warning(s) remain`,
+        })
+        if (!quiet) {
+          console.log(
+            `  ⚠️  oxlint-mdx: ${summary.errors ?? 0} error(s), ${summary.warnings ?? 0} warning(s) need manual fixes\n`,
+          )
+        }
+        overallSuccess = false
+      }
+    } else if (runError) {
+      // No parseable report and the process failed → genuine runtime failure.
+      steps.push({ name: 'oxlint-mdx Fix', success: false, details: runError.message })
+      if (!quiet) console.log(`  ✗ oxlint-mdx auto-fix failed: ${runError.message}\n`)
+      overallSuccess = false
+    } else {
       steps.push({
         name: 'oxlint-mdx Fix',
         success: true,
         details: 'Fixed markdown/MDX code issues',
       })
-      if (!quiet) console.log(`  ✓ oxlint-mdx auto-fix completed\n`)
-    } catch (err) {
-      const output = err.stdout?.toString() ?? err.stderr?.toString() ?? ''
-      const hasWarnings = output.includes('warning')
-      const hasErrors = output.includes('error')
-
-      if (hasErrors || hasWarnings) {
-        steps.push({
-          name: 'oxlint-mdx Fix',
-          success: false,
-          details: 'Some issues remain',
-        })
-        if (!quiet) console.log(`  ⚠️  oxlint-mdx found issues that need manual fixes\n`)
-      } else {
-        steps.push({
-          name: 'oxlint-mdx Fix',
-          success: false,
-          details: err.message,
-        })
-        if (!quiet) console.log(`  ✗ oxlint-mdx auto-fix failed: ${err.message}\n`)
-      }
-
-      overallSuccess = false
+      if (!quiet) console.log('  ✓ oxlint-mdx auto-fix completed\n')
     }
   } else {
     if (!quiet) {
@@ -886,11 +920,20 @@ async function runNuclearMode(files, options = {}) {
  * Check if oxlint-mdx is available in the project
  */
 async function checkOxlintMdxAvailable() {
+  // Detect availability by RESOLVING the package, not by executing the CLI.
+  // Running `oxlint-mdx --version` actually globs+lints the cwd (the flag is not
+  // a short-circuit), so a clean install with lint findings was wrongly
+  // reported as "not installed".
   try {
-    execSync('npx --no-install oxlint-mdx --version', { stdio: 'pipe' })
+    packageRequire.resolve('@markdownkit/oxlint-mdx/package.json')
     return true
   } catch {
-    return false
+    try {
+      packageRequire.resolve('@markdownkit/oxlint-mdx')
+      return true
+    } catch {
+      return false
+    }
   }
 }
 

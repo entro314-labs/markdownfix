@@ -1,6 +1,6 @@
 {
   "name": "@markdownkit/markdownkit",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "Opinionated markdown formatter and linter for MD, MDX, MDC, and MDD files using Remark/Unified ecosystem",
   "keywords": [
     "formatter",
@@ -82,8 +82,8 @@
   "dependencies": {
     "@adobe/remark-gridtables": "^3.0.20",
     "@code-dot-org/remark-plugins": "^2.0.1",
-    "@markdownkit/oxlint-mdx": "^2.2.0",
-    "@markdownkit/remark-mdd": "^2.2.0",
+    "@markdownkit/oxlint-mdx": "^2.2.3",
+    "@markdownkit/remark-mdd": "^2.2.2",
     "@theguild/remark-mermaid": "^0.3.0",
     "fumadocs-docgen": "^3.0.10",
     "glob": "^13.0.6",
@@ -91,7 +91,7 @@
     "rehype-remark": "^10.0.1",
     "remark": "latest",
     "remark-directive": "^4.0.0",
-    "remark-docx": "^0.3.28",
+    "remark-docx": "^0.3.29",
     "remark-emoji": "^5.0.2",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
@@ -158,8 +158,8 @@
   },
   "devDependencies": {
     "markdown-link-check": "^3.14.2",
-    "oxfmt": "^0.52.0",
-    "oxlint": "^1.67.0",
+    "oxfmt": "^0.55.0",
+    "oxlint": "^1.70.0",
     "oxlint-tsgolint": "^0.23.0",
     "remark-cli": "^12.0.1"
   },

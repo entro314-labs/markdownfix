@@ -112,7 +112,7 @@ markdownkit setup
 | `.md`     | ✅ Full     | GFM, frontmatter, tables, task lists    | Documentation, READMEs, blogs   |
 | `.mdx`    | ✅ Full     | Above + JSX components, imports/exports | React docs, interactive content |
 | `.mdc`    | ✅ Full     | Markdown Components (Nuxt Content)      | Nuxt Content, Vue documentation |
-| `.mdd`    | ⚠️ Optional | Business documents (see below)          | Invoices, proposals, contracts  |
+| `.mdd`    | ✅ Built-in | Business documents (see below)          | Invoices, proposals, contracts  |
 
 ### MDC Support
 
@@ -156,17 +156,18 @@ This is a warning message!
 
 ### MDD Support
 
-This formatter can **optionally** format `.mdd` files if you install the [MDD package](https://www.npmjs.com/package/@markdownkit/mdd):
+`.mdd` (Markdown Document) support is **built in** — `@markdownkit/remark-mdd` is a bundled dependency, so no extra install is required. `.mdd` files are handled by a dedicated, MDD-aware pipeline:
+
+- **Format** (`format`/`check`): safe normalization that **preserves** MDD directives (`::letterhead` … `::`), semantic classes (`{.legal-notice}`), and sub/superscripts (`H~2~O`, `note^1^`). MDX/MDC parsing is not applied to `.mdd`, so it never corrupts the source, and formatting is idempotent.
+- **Lint/validate** (`lint`/`check`): runs the canonical MDD validator (frontmatter, directives, per-document-type requirements, semantic classes) — the same checks as `mdd-validate` and the language server — so a document that is invalid in one tool is invalid in all of them. Recommendation warnings do not fail the run; only errors do.
 
 ```bash
-# Install MDD support
-pnpm add @markdownkit/mdd
-
-# Now .mdd files will be formatted
-pnpm run format
+# .mdd is validated and formatted out of the box
+markdownkit check  invoice.mdd
+markdownkit format invoice.mdd
 ```
 
-**Note**: MDD is a separate project for business documents. See the [MDD project](https://github.com/entro314-labs/mdd) for details.
+For HTML/PDF/DOCX preview and conversion of `.mdd` documents, use the companion [`@markdownkit/mdd`](https://www.npmjs.com/package/@markdownkit/mdd) package (`mdd-preview`, `mdd-convert`).
 
 ## CLI Commands
 
@@ -562,7 +563,7 @@ mdd-preview document.mdd
 npx mdd-preview examples/invoice.mdd
 ```
 
-markdownkit can **optionally format `.mdd` files** by installing MDD as a dependency.
+markdownkit **validates and safely formats `.mdd` files out of the box** (MDD support is bundled). Use `@markdownkit/mdd` for `.mdd` HTML/PDF/DOCX preview and conversion.
 
 #### 🖥️ [Anasa](https://github.com/entro314-labs/anasa)
 

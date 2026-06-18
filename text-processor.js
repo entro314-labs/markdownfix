@@ -360,6 +360,40 @@ export class TextProcessor {
   /**
    * Apply NLP processing via retext
    */
+  /**
+   * Mask inline markdown constructs that must not be altered by prose-oriented
+   * NLP/smartypants (which would otherwise turn `--flag` into an em-dash or
+   * straight quotes inside code into curly quotes). Returns the masked line and
+   * a `restore` function to reinsert the originals after processing.
+   *
+   * Protected: markdown links, inline code spans, autolinks, and bare URLs.
+   *
+   * @param {string} line
+   * @returns {{ masked: string, restore: (value: string) => string }}
+   */
+  protectInlineConstructs(line) {
+    const store = []
+    const mask = (match) => {
+      const token = `MKPROTECT${store.length}ENDMK`
+      store.push(match)
+      return token
+    }
+
+    const masked = line
+      // Markdown links [text](url) — protect the whole construct (URL especially).
+      .replace(/\[[^\]]*\]\([^)]*\)/g, mask)
+      // Inline code spans (single or multi backtick).
+      .replace(/(`+)[^`]*\1/g, mask)
+      // Autolinks <https://…> and bare URLs.
+      .replace(/<[^>\s]+>/g, mask)
+      .replace(/\bhttps?:\/\/[^\s)]+/g, mask)
+
+    const restore = (value) =>
+      value.replace(/MKPROTECT(\d+)ENDMK/g, (_token, index) => store[Number(index)] ?? '')
+
+    return { masked, restore }
+  }
+
   async applyNLP(text) {
     const processor = this.initRetextProcessor()
     const lines = text.split('\n')
@@ -397,9 +431,12 @@ export class TextProcessor {
 
       // Process with retext
       try {
-        const corrected = this.applyCommonTypos(trimmed)
+        // Mask inline code / links / URLs so smartypants & typo fixes do not
+        // corrupt them (e.g. `npm i --save` -> em-dash), then restore.
+        const { masked, restore } = this.protectInlineConstructs(trimmed)
+        const corrected = this.applyCommonTypos(masked)
         const processed = await processor.process(corrected)
-        let nlpResult = String(processed).trim()
+        let nlpResult = restore(String(processed).trim())
 
         // Ensure punctuation if needed
         if (this.options.ensurePunctuation) {

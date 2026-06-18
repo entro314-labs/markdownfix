@@ -1,0 +1,27 @@
+---
+title: MDX Features Overview
+date: 2024-02-01
+---
+
+# MDX Features Overview
+
+MDX lets documentation mix Markdown content with component-like syntax when the
+rendering environment supports it.
+
+## Markdown Remains the Base
+
+Use ordinary Markdown for headings, paragraphs, lists, links, and code blocks.
+
+## Components Need Valid Expressions
+
+When a document includes JSX-style components, keep attributes explicit and
+lintable:
+
+```jsx
+<Callout tone="info">Use MDX only where Markdown is not enough.</Callout>
+```
+
+## Keep Examples Portable
+
+Prefer short examples that can be linted without requiring application-only
+runtime state.
